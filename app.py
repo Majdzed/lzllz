@@ -73,30 +73,30 @@ COURSES = {
     }
 }
 
-# Additional teachers for TD/TP when needed
+# Additional teachers for TD/TP when needed (max 3 teachers per module)
 ADDITIONAL_TEACHERS = {
     "rx2": {
-        "td": ["Prof. Karim", "Ms. Sara", "Dr. Ali", "Mr. Hassan", "Prof. Zainab"],
-        "tp": ["Mr. Hakim", "Dr. Layla", "Mr. Mohammed", "Ms. Fatima", "Dr. Younes"]
+        "td": ["Dr. Ahmed", "Prof. Karim", "Dr. Ali"],  # Course teacher first, then 2 others
+        "tp": ["Mr. Hakim", "Dr. Layla", "Mr. Mohammed"]
     },
     "ro2": {
-        "td": ["Dr. Nadia", "Prof. Samia", "Dr. Hassan", "Ms. Rania", "Mr. Amir"]
-    },
-    "AI": {
-        "td": ["Dr. Youssef", "Prof. Nour", "Dr. Amine", "Ms. Mina", "Prof. Bilal"],
-        "tp": ["Mr. Reda", "Ms. Yasmine", "Dr. Adil", "Prof. Salma", "Mr. Kamal"]
+        "td": ["Dr. Nadia", "Prof. Samia", "Dr. Hassan"]  # Dr. Nadia is already both cours and TD teacher
     },
     "adhd": {
-        "td": ["Ms. Leila", "Dr. Hamza", "Prof. Rim", "Mr. Rachid", "Ms. Hanane"]
+        "td": ["Prof. Omar", "Ms. Leila", "Dr. Hamza"]  # Course teacher first
+    },
+    "AI": {
+        "td": ["Dr. Sofia", "Dr. Youssef", "Prof. Nour"],  # Course teacher first, then 2 others
+        "tp": ["Mr. Reda", "Ms. Yasmine", "Dr. Adil"]
     },
     "mf": {
-        "td": ["Dr. Mehdi", "Prof. Latifa", "Dr. Sami", "Ms. Wafa", "Mr. Nabil"]
+        "td": ["Dr. Mehdi", "Prof. Latifa", "Dr. Sami"]  # Dr. Mehdi is already both cours and TD teacher
     },
     "security": {
-        "td": ["Ms. Amina", "Dr. Omar", "Prof. Yassine", "Ms. Nisrine", "Mr. Samir"]
+        "td": ["Prof. Hamid", "Ms. Amina", "Dr. Omar"]  # Course teacher first, then 2 others
     },
     "an": {
-        "td": ["Mr. Tarik", "Prof. Samira", "Dr. Khalid", "Ms. Hiba", "Prof. Fouad"]
+        "td": ["Dr. Jamal", "Mr. Tarik", "Prof. Samira"]  # Course teacher first, then 2 others
     }
 }
 
