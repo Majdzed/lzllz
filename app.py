@@ -125,7 +125,9 @@ def would_create_too_many_consecutive_sessions(group, day, slot_index, consecuti
         consecutive_sessions[group][day][slot_index] = 1
         # Check if there are consecutive sessions before this
         if slot_index > 0 and (slot_index - 1) in consecutive_sessions[group][day]:
-            consecutive_sessions[group][day][slot_index] = consecutive_sessions[group][day][slot_index - 1] + 1
+            # If the previous slot has a session (any type), count it as consecutive
+            prev_consecutive = consecutive_sessions[group][day][slot_index - 1]
+            consecutive_sessions[group][day][slot_index] = prev_consecutive + 1
     
     # Check if the consecutive count exceeds 3
     if consecutive_sessions[group][day].get(slot_index, 0) > 3:
@@ -147,7 +149,9 @@ def insert_break_if_needed(group, day, consecutive_sessions):
                 st.session_state.schedules[group][day][TIME_SLOTS[middle_index]["label"]] = "BREAK"
                 
                 # Update consecutive sessions after inserting break
+                # Reset counts for all slots after the break
                 for i in range(middle_index + 1, len(TIME_SLOTS)):
+                    # Count starts from 1 at middle_index+1
                     if i in consecutive_sessions[group][day]:
                         consecutive_sessions[group][day][i] = i - middle_index
             
