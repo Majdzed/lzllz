@@ -224,58 +224,61 @@ class TimeTableCSP:
                         return False
             
         # 2. Check for consecutive slots constraint (max 3 consecutive)
+        # This is a more accurate implementation for consecutive session checking
+        def would_create_too_many_consecutive_sessions(day, slot_idx, group_to_check):
+            # Get all slots for this day and group in order
+            day_slots = []
+            for s_idx, s in enumerate(SLOTS):
+                if day == "Tuesday" and s_idx >= 3:
+                    continue  # Skip afternoon slots on Tuesday
+                
+                # Check if slot is or will be occupied
+                is_occupied = False
+                if s_idx == slot_idx:
+                    # This is the slot we're trying to schedule
+                    is_occupied = True
+                else:
+                    # Check if this slot is already scheduled in the assignment
+                    is_occupied = any(
+                        assignment.get(v) == (day, s, r)
+                        for v in assignment
+                        for r in sum(ROOMS.values(), [])
+                        if v.split('_')[2] == group_to_check
+                    )
+                
+                if is_occupied:
+                    day_slots.append(s_idx)
+            
+            # Check for consecutive slots (more than 3)
+            day_slots.sort()
+            consecutive = 1
+            max_consecutive = 1
+            
+            for i in range(1, len(day_slots)):
+                if day_slots[i] == day_slots[i-1] + 1:
+                    consecutive += 1
+                    max_consecutive = max(max_consecutive, consecutive)
+                else:
+                    consecutive = 1
+            
+            return max_consecutive > 3
+        
         # Convert slot to index
         slot_idx = SLOTS.index(slot)
         
-        # For each group, count consecutive slots
+        # For each group, check consecutive slots
         if group_name == "all":
             # For lectures (affecting all groups), check all groups
-            groups_to_check = [f"G{i}" for i in range(1, NUM_GROUPS + 1)] + ["all"]
+            groups_to_check = [f"G{i}" for i in range(1, NUM_GROUPS + 1)]
         else:
-            # For TD/TP, check only this group and shared lectures
-            groups_to_check = [group_name, "all"]
+            # For TD/TP, check only this group
+            groups_to_check = [group_name]
         
+        # Also check combined group schedule (lectures + group-specific sessions)
         for check_group in groups_to_check:
-            # Count consecutive slots before this slot
-            consecutive_before = 0
-            for i in range(1, 4):  # Check up to 3 slots before
-                check_slot_idx = slot_idx - i
-                if check_slot_idx < 0:
-                    break
-                    
-                check_slot = SLOTS[check_slot_idx]
-                is_scheduled = any(
-                    assignment.get(v) == (day, check_slot, r) 
-                    for v in assignment 
-                    if v.split('_')[2] == check_group
-                    for r in sum(ROOMS.values(), [])
-                )
-                if is_scheduled:
-                    consecutive_before += 1
-                else:
-                    break
-            
-            # Count consecutive slots after this slot
-            consecutive_after = 0
-            for i in range(1, 4):  # Check up to 3 slots after
-                check_slot_idx = slot_idx + i
-                if check_slot_idx >= len(SLOTS) or (day == "Tuesday" and check_slot_idx >= 3):
-                    break
-                    
-                check_slot = SLOTS[check_slot_idx]
-                is_scheduled = any(
-                    assignment.get(v) == (day, check_slot, r) 
-                    for v in assignment 
-                    if v.split('_')[2] == check_group
-                    for r in sum(ROOMS.values(), [])
-                )
-                if is_scheduled:
-                    consecutive_after += 1
-                else:
-                    break
-            
-            # If assigning this slot would create more than 3 consecutive slots, it's not consistent
-            if consecutive_before + consecutive_after + 1 > 3:
+            # Create a "combined" group that includes both group-specific and "all" sessions
+            combined_group = check_group
+            if would_create_too_many_consecutive_sessions(day, slot_idx, combined_group):
                 return False
         
         return True

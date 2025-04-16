@@ -92,7 +92,7 @@ ADDITIONAL_TEACHERS = {
     },
     "Algorithms": {
         "td": ["Dr. White", "Dr. Morris", "Prof. Bell"],
-        "tp": ["Ms. Martinez", "Mr. Cooper", "Dr. Reed"]
+        "tp": ["Ms. Martinez", "Mr. Cooper", "Dr. Achrafness"]
     }
 }
 
@@ -119,20 +119,28 @@ def is_slot_available(day, slot_index):
     return True
 
 # Check if scheduling this slot would create more than 3 consecutive sessions
-def would_create_too_many_consecutive_sessions(group, day, slot_index, consecutive_sessions):
-    # Initialize consecutive count for this slot if not exists
-    if slot_index not in consecutive_sessions[group][day]:
-        consecutive_sessions[group][day][slot_index] = 1
-        # Check if there are consecutive sessions before this
-        if slot_index > 0 and (slot_index - 1) in consecutive_sessions[group][day]:
-            # If the previous slot has a session (any type), count it as consecutive
-            prev_consecutive = consecutive_sessions[group][day][slot_index - 1]
-            consecutive_sessions[group][day][slot_index] = prev_consecutive + 1
-    
-    # Check if the consecutive count exceeds 3
-    if consecutive_sessions[group][day].get(slot_index, 0) > 3:
-        return True
-    return False
+def would_create_too_many_consecutive_sessions(schedules, group, day, slot_index):
+    """Check if scheduling at this slot would create more than 3 consecutive sessions for the group."""
+    # Count sessions before the current slot
+    consecutive_before = 0
+    for i in range(slot_index - 1, -1, -1):
+        slot_label = TIME_SLOTS[i]["label"]
+        if schedules[group][day].get(slot_label) and schedules[group][day][slot_label] != "UNAVAILABLE" and schedules[group][day][slot_label] != "BREAK":
+            consecutive_before += 1
+        else:
+            break
+
+    # Count sessions after the current slot
+    consecutive_after = 0
+    for i in range(slot_index + 1, len(TIME_SLOTS)):
+        slot_label = TIME_SLOTS[i]["label"]
+        if schedules[group][day].get(slot_label) and schedules[group][day][slot_label] != "UNAVAILABLE" and schedules[group][day][slot_label] != "BREAK":
+            consecutive_after += 1
+        else:
+            break
+
+    # If adding this slot would create more than 3 consecutive sessions, return True
+    return (consecutive_before + 1 + consecutive_after) > 3
 
 # Insert empty slot to break consecutive sessions if needed
 def insert_break_if_needed(group, day, consecutive_sessions):
@@ -252,7 +260,7 @@ def generate_all_schedules():
                         break
                     
                     # Check if this would create more than 3 consecutive sessions
-                    if would_create_too_many_consecutive_sessions(group, day, slot_index, consecutive_sessions):
+                    if would_create_too_many_consecutive_sessions(st.session_state.schedules, group, day, slot_index):
                         consecutive_ok = False
                         break
                 
@@ -283,10 +291,22 @@ def generate_all_schedules():
                                 prev_consecutive = consecutive_sessions[group][day][slot_index - 1]
                                 consecutive_sessions[group][day][slot_index] = prev_consecutive + 1
                         
-                        # Update consecutive count for next slots as well
-                        for next_idx in range(slot_index + 1, len(TIME_SLOTS)):
-                            if st.session_state.schedules[group][day].get(TIME_SLOTS[next_idx]["label"]) is not None:
-                                consecutive_sessions[group][day][next_idx] = consecutive_sessions[group][day][slot_index] + 1
+                        # Update consecutive count for next slots as well if they have sessions
+                        next_idx = slot_index + 1
+                        while next_idx < len(TIME_SLOTS):
+                            next_slot_label = TIME_SLOTS[next_idx]["label"]
+                            if st.session_state.schedules[group][day].get(next_slot_label) is not None and st.session_state.schedules[group][day].get(next_slot_label) != "UNAVAILABLE":
+                                consecutive_sessions[group][day][next_idx] = consecutive_sessions[group][day][slot_index] + (next_idx - slot_index)
+                                if consecutive_sessions[group][day][next_idx] > 3:
+                                    # Insert a break to prevent more than 3 consecutive sessions
+                                    middle_idx = slot_index + 1 + ((next_idx - slot_index) // 2)
+                                    middle_slot_label = TIME_SLOTS[middle_idx]["label"]
+                                    st.session_state.schedules[group][day][middle_slot_label] = "BREAK"
+                                    # Recalculate consecutive sessions
+                                    for i in range(middle_idx + 1, len(TIME_SLOTS)):
+                                        if i in consecutive_sessions[group][day]:
+                                            consecutive_sessions[group][day][i] = i - middle_idx
+                            next_idx += 1
                     
                     teacher_schedule[teacher_key] = True
                     scheduled = True
@@ -410,7 +430,7 @@ def generate_all_schedules():
                                 teacher_key = f"{teacher}_{day}_{slot_label}"
                                 if teacher_key not in teacher_schedule:
                                     # Check consecutive sessions constraint
-                                    if would_create_too_many_consecutive_sessions(group, day, slot_index, consecutive_sessions):
+                                    if would_create_too_many_consecutive_sessions(st.session_state.schedules, group, day, slot_index):
                                         continue  # Backtrack: This would exceed the consecutive session limit
                                     
                                     # Track teacher's day
@@ -507,29 +527,66 @@ def display_schedule(group_name):
                 if len(parts) >= 2 and parts[0] not in courses_per_day[day]:
                     courses_per_day[day].append(parts[0])
             
-            # Highlight shared sessions
-            if value and "(ALL)" in value:
+            # Style based on session type
+            if value == "UNAVAILABLE":
+                value = "⛔ UNAVAILABLE"
+            elif value == "BREAK":
+                value = "☕ BREAK"
+            elif value and "(ALL)" in value:
                 value = f"🔄 {value}"
+            elif value:
+                value = f"📚 {value}"
                 
             schedule_df.at[slot_label, day] = value
     
-    # Display the schedule
+    # Display the schedule with improved styling
     st.dataframe(
-        schedule_df.style.applymap(
-            lambda x: "background-color: #ffcccb" if x == "UNAVAILABLE" else
-                     ("background-color: #d4f1f9" if x and "🔄" in x else  # Shared sessions
-                      "background-color: #d5f5e3" if x else  # Individual sessions
-                      "background-color: white")
-        ),
-        use_container_width=True
+        schedule_df.style
+        .applymap(
+            lambda x: ("background-color: #ffcccb; color: #7B241C; font-weight: bold" if "⛔" in str(x) else
+                      "background-color: #FCF3CF; color: #7D6608; font-weight: bold" if "☕" in str(x) else
+                      "background-color: #d4e6f6; color: #1B4F72; font-weight: bold" if "🔄" in str(x) else  # Shared sessions
+                      "background-color: #e2f0d9; color: #145A32; font-weight: bold" if "📚" in str(x) else  # Individual sessions
+                      "background-color: white"))
+        .set_properties(**{'border': '1px solid #EAECEE', 'text-align': 'left', 'padding': '10px'})
+        .set_table_styles([
+            {'selector': 'th', 'props': [('background-color', '#5B9BD5'), ('color', 'white'), 
+                                        ('font-weight', 'bold'), ('border', '1px solid #EAECEE'), 
+                                        ('padding', '10px'), ('text-align', 'center')]},
+            {'selector': 'caption', 'props': [('caption-side', 'top'), ('font-size', '16px'), ('font-weight', 'bold')]}
+        ])
+        .set_caption(f"Schedule for {group_name}"),
+        use_container_width=True,
+        height=350
     )
     
-    # Display courses per day count
-    st.write("**Courses per day:**")
-    for day in DAYS:
-        count = len(courses_per_day[day])
-        status = "✅" if count <= 2 else "❌"
-        st.write(f"- {day}: {count} courses {status}")
+    # Display courses per day count with improved styling
+    st.markdown("### Courses per day")
+    
+    col_day = st.columns(len(DAYS))
+    for i, day in enumerate(DAYS):
+        with col_day[i]:
+            count = len(courses_per_day[day])
+            if count <= 2:
+                st.markdown(f"""
+                <div style="background-color: #e2f0d9; color: #145A32; padding: 10px; border-radius: 5px; text-align: center; margin: 5px;">
+                    <h4 style="margin: 0;">{day}</h4>
+                    <p style="font-size: 20px; margin: 5px 0;">
+                        <span style="font-weight: bold; font-size: 24px;">{count}</span> courses
+                    </p>
+                    <p style="color: #2ECC71; font-size: 24px; margin: 0;">✅</p>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div style="background-color: #FADBD8; color: #7B241C; padding: 10px; border-radius: 5px; text-align: center; margin: 5px;">
+                    <h4 style="margin: 0;">{day}</h4>
+                    <p style="font-size: 20px; margin: 5px 0;">
+                        <span style="font-weight: bold; font-size: 24px;">{count}</span> courses
+                    </p>
+                    <p style="color: #E74C3C; font-size: 24px; margin: 0;">❌</p>
+                </div>
+                """, unsafe_allow_html=True)
     
     return schedule_df
 
@@ -543,15 +600,37 @@ def display_all_schedules():
     
     for i, group in enumerate(st.session_state.groups):
         with tabs[i]:
-            st.subheader(f"Schedule for {group}")
+            st.header(f"Schedule for {group}", divider="blue")
             
-            # Add legend for shared sessions
-            st.write("**Legend:**")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("🔄 - Shared lecture (all groups attend)")
-            with col2:
-                st.markdown("Regular session (only this group attends)")
+            # Add legend for different session types
+            st.markdown("### Legend")
+            legend_cols = st.columns(4)
+            with legend_cols[0]:
+                st.markdown("""
+                <div class="legend-item legend-shared">
+                    🔄 Shared lecture (all groups)
+                </div>
+                """, unsafe_allow_html=True)
+            with legend_cols[1]:
+                st.markdown("""
+                <div class="legend-item legend-individual">
+                    📚 Individual session
+                </div>
+                """, unsafe_allow_html=True)
+            with legend_cols[2]:
+                st.markdown("""
+                <div class="legend-item legend-unavailable">
+                    ⛔ Unavailable
+                </div>
+                """, unsafe_allow_html=True)
+            with legend_cols[3]:
+                st.markdown("""
+                <div class="legend-item" style="background-color: #FCF3CF; border-left: 4px solid #F1C40F;">
+                    ☕ Break time
+                </div>
+                """, unsafe_allow_html=True)
+            
+            st.divider()
             
             df = display_schedule(group)
             
@@ -559,7 +638,7 @@ def display_all_schedules():
             csv = df.to_csv() if df is not None else ""
             if csv:
                 st.download_button(
-                    label=f"Download {group} Schedule",
+                    label=f"📥 Download {group} Schedule",
                     data=csv,
                     file_name=f"{group.lower().replace(' ', '_')}_schedule.csv",
                     mime="text/csv"
