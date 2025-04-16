@@ -1,0 +1,33 @@
+    "rx2": {
+        "cours": {"hours": 1, "teacher": "Dr. Zenadji", "shared": True},
+        "td": {"hours": 1, "teacher": "Mr.Sahli ", "shared": False},
+        "tp": {"hours": 1, "teacher": "Dr. Zenadji", "shared": False}
+    },
+    "ro2": {
+        "cours": {"hours": 1, "teacher": "Dr. Issaadi", "shared": True},
+        "td": {"hours": 1, "teacher": "Dr. Issaadi", "shared": False}
+    },
+    "adhd": {
+        "cours": {"hours": 1, "teacher": "Prof. Djenadi", "shared": True},
+        "td": {"hours": 1, "teacher": "Prof. Djenadi", "shared": False}
+    },
+    "AI": {
+        "cours": {"hours": 1, "teacher": "Dr. Lekehali", "shared": True},
+        "td": {"hours": 1, "teacher": "Dr. Lekehali", "shared": False},
+        "tp": {"hours": 1, "teacher": "el chabiba", "shared": False}
+    },
+    "Entrepreneuriat": {
+        "cours": {"hours": 1, "teacher": "mme. Kaci", "shared": True}
+    },
+    "mf": {
+        "cours": {"hours": 1, "teacher": "Dr. el Zedk", "shared": True},
+        "td": {"hours": 1, "teacher": "Dr. el Zedk", "shared": False}
+    },
+    "security": {
+        "cours": {"hours": 1, "teacher": "Dr. Brahimi", "shared": True},
+        "td": {"hours": 1, "teacher": "Dr. Brahimi", "shared": False}
+    },
+    "an": {
+        "cours": {"hours": 1, "teacher": "Dr. Alkama", "shared": True},
+        "td": {"hours": 1, "teacher": "Dr. Alkama", "shared": False}
+    }
