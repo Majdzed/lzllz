@@ -31,29 +31,41 @@ TIME_SLOTS = [
     {"label": "09:40-11:10", "unavailable": []},
     {"label": "11:20-12:50", "unavailable": []},
     {"label": "13:00-14:30", "unavailable": []},
-    {"label": "14:40-16:10", "unavailable": []},
-    {"label": "16:20-17:50", "unavailable": []}
+    {"label": "14:40-16:10", "unavailable": []}
 ]
 
 # Courses and their components
 COURSES = {
     "rx2": {
         "cours": {"teacher": "Dr. Zenadji", "shared": True},
-        "td": {"teacher": "Mr.Sahli", "shared": False},
-        "tp": {"teacher": "Dr. Zenadji", "shared": False}
+        "td": {"teacher": "Mr. Sahli", "shared": False},
+        "tp": [  # Using a list for multiple teachers
+            {"teacher": "Dr. Zenadji", "shared": False},
+            {"teacher": "Mr. Benali", "shared": False}
+        ]
     },
     "ro2": {
         "cours": {"teacher": "Dr. Issaadi", "shared": True},
-        "td": {"teacher": "Dr. Issaadi", "shared": False}
+        "td": [
+            {"teacher": "Dr. Issaadi", "shared": False},
+            {"teacher": "Dr. Ighdabi", "shared": False}
+        ]
     },
     "adhd": {
         "cours": {"teacher": "Prof. Djenadi", "shared": True},
-        "td": {"teacher": "Prof. Djenadi", "shared": False}
+        "td": [
+            {"teacher": "Prof. Djenadi", "shared": False},
+            {"teacher": "Dr. two", "shared": False}
+        ]
     },
     "AI": {
         "cours": {"teacher": "Dr. Lekehali", "shared": True},
         "td": {"teacher": "Dr. Lekehali", "shared": False},
-        "tp": {"teacher": "el chabiba", "shared": False}
+        "tp": [
+            {"teacher": "el chabiba", "shared": False},
+            {"teacher": "Mr. Ferhat", "shared": False},
+            {"teacher": "Mr. Benali", "shared": False}
+        ]
     },
     "Entrepreneuriat": {
         "cours": {"teacher": "mme. Kaci", "shared": True}
@@ -195,13 +207,24 @@ def generate_all_schedules():
     all_shared_sessions = []
     for course_name, components in COURSES.items():
         for component_name, details in components.items():
-            if details.get("shared", False):
+            # Check if details is a dict (single teacher) or list (multiple teachers)
+            if isinstance(details, dict) and details.get("shared", False):
                 all_shared_sessions.append({
                     "course": course_name,
                     "component": component_name,
                     "teacher": details["teacher"],
                     "label": f"{course_name} {component_name} ({details['teacher']}) (ALL)"
                 })
+            elif isinstance(details, list):
+                # For components with multiple teachers, check each one
+                for teacher_info in details:
+                    if isinstance(teacher_info, dict) and teacher_info.get("shared", False):
+                        all_shared_sessions.append({
+                            "course": course_name,
+                            "component": component_name,
+                            "teacher": teacher_info["teacher"],
+                            "label": f"{course_name} {component_name} ({teacher_info['teacher']}) (ALL)"
+                        })
     
     # Shuffle shared sessions for random scheduling
     random.shuffle(all_shared_sessions)
@@ -327,145 +350,258 @@ def generate_all_schedules():
     # The same backtracking characteristics apply here
     for course_name, components in COURSES.items():
         for component_name, details in components.items():
-            if not details.get("shared", False):
-                # Get appropriate teachers for this component
-                teachers = []
-                if course_name in ADDITIONAL_TEACHERS and component_name in ADDITIONAL_TEACHERS[course_name]:
-                    teachers = ADDITIONAL_TEACHERS[course_name][component_name]
-                else:
-                    teachers = [details["teacher"]] * len(st.session_state.groups)
-                
-                # Try backup teachers if needed
-                if len(teachers) == 0 and course_name in BACKUP_TEACHERS:
-                    teachers = BACKUP_TEACHERS[course_name]
-                
-                # For each group, schedule this component
-                for i, group in enumerate(st.session_state.groups):
-                    # Try each teacher until we find one that works with the 2-day constraint
-                    best_teacher = None
-                    teacher_found = False
-                    
-                    # First try the original assigned teacher or the one in the rotation
-                    original_teacher = teachers[i % len(teachers)]
-                    
-                    if original_teacher not in teacher_days or len(teacher_days[original_teacher]) < 2:
-                        best_teacher = original_teacher
-                        teacher_found = True
+            # Check if details is a dict (single teacher) or list (multiple teachers)
+            if isinstance(details, dict):
+                if not details.get("shared", False):
+                    # Get appropriate teachers for this component
+                    teachers = []
+                    if course_name in ADDITIONAL_TEACHERS and component_name in ADDITIONAL_TEACHERS[course_name]:
+                        teachers = ADDITIONAL_TEACHERS[course_name][component_name]
                     else:
-                        # Try other teachers - this is a form of backtracking at the teacher selection level
-                        for potential_teacher in teachers:
-                            if potential_teacher not in teacher_days or len(teacher_days[potential_teacher]) < 2:
-                                best_teacher = potential_teacher
-                                teacher_found = True
+                        teachers = [details["teacher"]] * len(st.session_state.groups)
+                    
+                    # For each group, schedule this component
+                    for i, group in enumerate(st.session_state.groups):
+                        # Assign a teacher from the list (cycling if needed)
+                        teacher_index = i % len(teachers)
+                        teacher = teachers[teacher_index]
+                        
+                        # Create a session label
+                        session_label = f"{course_name} {component_name} ({teacher})"
+                        
+                        # Schedule this session
+                        scheduled = False
+                        
+                        # Try each day and time slot
+                        days = DAYS.copy()
+                        random.shuffle(days)
+                        
+                        for day in days:
+                            if scheduled:
                                 break
-                        
-                        # If still no teacher found, try backup teachers
-                        if not teacher_found and course_name in BACKUP_TEACHERS:
-                            for potential_teacher in BACKUP_TEACHERS[course_name]:
-                                if potential_teacher not in teacher_days or len(teacher_days[potential_teacher]) < 2:
-                                    best_teacher = potential_teacher
-                                    teacher_found = True
-                                    break
-                    
-                    # If no teacher found with < 2 days, just use any available teacher
-                    if not teacher_found:
-                        best_teacher = original_teacher
-                    
-                    teacher = best_teacher
-                    
-                    session = {
-                        "course": course_name,
-                        "component": component_name,
-                        "teacher": teacher,
-                        "label": f"{course_name} {component_name} ({teacher}) ({group})"
-                    }
-                    
-                    scheduled = False
-                    
-                    # Try each day and time slot
-                    days = DAYS.copy()
-                    random.shuffle(days)
-                    
-                    # First try days the teacher already teaches on
-                    preferred_days = list(teacher_days.get(teacher, set()))
-                    if preferred_days:
-                        # Add these days first
-                        for day in preferred_days:
-                            if day in days:  # Make sure day hasn't been removed
-                                days.remove(day)
-                        days = preferred_days + days
-                    
-                    # This is another backtracking loop - try each day until we find a valid one
-                    for day in days:
-                        if scheduled:
-                            break
+                                
+                            # Check if teacher already teaches on 2 days
+                            if teacher in teacher_days and len(teacher_days[teacher]) >= 2 and day not in teacher_days[teacher]:
+                                continue  # Skip this day
                             
-                        # Check teacher day constraint
-                        if teacher in teacher_days and len(teacher_days[teacher]) >= 2 and day not in teacher_days[teacher]:
-                            continue  # Backtrack: Skip this day, teacher already teaches on 2 other days
-                        
-                        # For td/tp, try to schedule on days where the student already has the cours
-                        # but still respect the 2 course limit
-                        if component_name != "cours" and course_name in group_daily_courses[group][day]:
-                            # This is ideal - schedule TD/TP on same day as the lecture
-                            pass
-                        else:
-                            # Not ideal, but still possible if there's space
-                            pass
+                            # Check if adding this course would exceed the 2 cours per day limit for the group
+                            if component_name == "cours" and len(group_daily_courses[group][day]) >= 2:
+                                continue  # Skip this day
+                                
+                            slots = [s["label"] for s in TIME_SLOTS]
+                            random.shuffle(slots)
                             
-                        slots = [s["label"] for s in TIME_SLOTS]
-                        random.shuffle(slots)
-                        
-                        # Try each time slot until we find a valid one - backtracking at the slot level
-                        for slot_label in slots:
-                            slot_index = next((i for i, s in enumerate(TIME_SLOTS) if s["label"] == slot_label), None)
-                            
-                            # Skip unavailable slots
-                            if not is_slot_available(day, slot_index):
-                                continue  # Backtrack: This slot is unavailable
-                            
-                            # Check if this slot is available for this group
-                            if st.session_state.schedules[group][day].get(slot_label) is None:
-                                # Check if teacher is available at this time
-                                teacher_key = f"{teacher}_{day}_{slot_label}"
-                                if teacher_key not in teacher_schedule:
-                                    # Check consecutive sessions constraint
+                            for slot_label in slots:
+                                slot_index = next((i for i, s in enumerate(TIME_SLOTS) if s["label"] == slot_label), None)
+                                
+                                # Skip unavailable slots
+                                if not is_slot_available(day, slot_index):
+                                    continue
+                                
+                                # Check if slot is available for this group
+                                if st.session_state.schedules[group][day].get(slot_label) is None:
+                                    # Check if this would create more than 3 consecutive sessions
                                     if would_create_too_many_consecutive_sessions(st.session_state.schedules, group, day, slot_index):
-                                        continue  # Backtrack: This would exceed the consecutive session limit
-                                    
-                                    # Track teacher's day
-                                    if teacher not in teacher_days:
-                                        teacher_days[teacher] = set()
-                                    teacher_days[teacher].add(day)
-                                    
-                                    # Schedule this session
-                                    st.session_state.schedules[group][day][slot_label] = session["label"]
-                                    teacher_schedule[teacher_key] = True
-                                    
-                                    # Update consecutive sessions
-                                    if slot_index not in consecutive_sessions[group][day]:
-                                        consecutive_sessions[group][day][slot_index] = 1
-                                        # Check if there are consecutive sessions before this
-                                        if slot_index > 0 and (slot_index - 1) in consecutive_sessions[group][day]:
-                                            prev_consecutive = consecutive_sessions[group][day][slot_index - 1]
-                                            consecutive_sessions[group][day][slot_index] = prev_consecutive + 1
-                                    
-                                    # Update consecutive count for next slots as well
-                                    for next_idx in range(slot_index + 1, len(TIME_SLOTS)):
-                                        if st.session_state.schedules[group][day].get(TIME_SLOTS[next_idx]["label"]) is not None:
-                                            consecutive_sessions[group][day][next_idx] = consecutive_sessions[group][day][slot_index] + 1
-                                    
-                                    scheduled = True
-                                    break
-                    
-                    if not scheduled:
-                        # As with shared sessions, we couldn't find a valid slot after trying all possibilities
-                        # In a full backtracking algorithm, we would undo previous assignments and try again
-                        st.warning(f"Could not schedule: {session['course']} {session['component']} for {group}")
+                                        continue
+                                
+                                    # Check if teacher is available
+                                    teacher_key = f"{teacher}_{day}_{slot_label}"
+                                    if teacher_key not in teacher_schedule:
+                                        # Track teacher's day
+                                        if teacher not in teacher_days:
+                                            teacher_days[teacher] = set()
+                                        teacher_days[teacher].add(day)
+                                        
+                                        # Schedule this session
+                                        st.session_state.schedules[group][day][slot_label] = session_label
+                                        
+                                        # Track courses per day if this is a cours component
+                                        if component_name == "cours":
+                                            group_daily_courses[group][day].append(course_name)
+                                        
+                                        # Update consecutive sessions
+                                        if slot_index not in consecutive_sessions[group][day]:
+                                            consecutive_sessions[group][day][slot_index] = 1
+                                            # Check if there are consecutive sessions before this
+                                            if slot_index > 0 and (slot_index - 1) in consecutive_sessions[group][day]:
+                                                prev_consecutive = consecutive_sessions[group][day][slot_index - 1]
+                                                consecutive_sessions[group][day][slot_index] = prev_consecutive + 1
+                                        
+                                        teacher_schedule[teacher_key] = True
+                                        scheduled = True
+                                        break
                         
-                        # We could potentially try:
-                        # 1. A different teacher, even if they teach on more than 2 days
-                        # 2. Alternative ways to schedule previous sessions to make room for this one
+                        if not scheduled:
+                            # If we couldn't schedule this session, try using a backup teacher
+                            backup_teachers = COMPONENT_BACKUP_TEACHERS.get(component_name, [])
+                            success = False
+                            
+                            for backup_teacher in backup_teachers:
+                                # Try using backup teacher
+                                for day in days:
+                                    if success:
+                                        break
+                                    
+                                    # Check if backup teacher already teaches on 2 days
+                                    if backup_teacher in teacher_days and len(teacher_days[backup_teacher]) >= 2 and day not in teacher_days[backup_teacher]:
+                                        continue
+                                    
+                                    for slot_label in slots:
+                                        slot_index = next((i for i, s in enumerate(TIME_SLOTS) if s["label"] == slot_label), None)
+                                        
+                                        # Skip unavailable slots
+                                        if not is_slot_available(day, slot_index):
+                                            continue
+                                        
+                                        # Check if slot is available for this group
+                                        if st.session_state.schedules[group][day].get(slot_label) is None:
+                                            # Check if this would create more than 3 consecutive sessions
+                                            if would_create_too_many_consecutive_sessions(st.session_state.schedules, group, day, slot_index):
+                                                continue
+                                            
+                                            # Check if backup teacher is available
+                                            teacher_key = f"{backup_teacher}_{day}_{slot_label}"
+                                            if teacher_key not in teacher_schedule:
+                                                # Track teacher's day
+                                                if backup_teacher not in teacher_days:
+                                                    teacher_days[backup_teacher] = set()
+                                                teacher_days[backup_teacher].add(day)
+                                                
+                                                # Schedule this session with backup teacher
+                                                session_label = f"{course_name} {component_name} ({backup_teacher}) (backup)"
+                                                st.session_state.schedules[group][day][slot_label] = session_label
+                                                
+                                                teacher_schedule[teacher_key] = True
+                                                success = True
+                                                break
+                            
+                            if not success:
+                                st.warning(f"Could not schedule {course_name} {component_name} for {group}")
+            elif isinstance(details, list):
+                # Handle list of teacher details (multiple teachers)
+                teachers = []
+                for teacher_info in details:
+                    if not teacher_info.get("shared", False):
+                        teachers.append(teacher_info["teacher"])
+                
+                if teachers:  # Only proceed if we have non-shared teachers
+                    # For each group, schedule this component
+                    for i, group in enumerate(st.session_state.groups):
+                        # Assign a teacher from the list (cycling if needed)
+                        teacher_index = i % len(teachers)
+                        teacher = teachers[teacher_index]
+                        
+                        # Create a session label
+                        session_label = f"{course_name} {component_name} ({teacher})"
+                        
+                        # Schedule this session
+                        scheduled = False
+                        
+                        # Try each day and time slot
+                        days = DAYS.copy()
+                        random.shuffle(days)
+                        
+                        for day in days:
+                            if scheduled:
+                                break
+                                
+                            # Check if teacher already teaches on 2 days
+                            if teacher in teacher_days and len(teacher_days[teacher]) >= 2 and day not in teacher_days[teacher]:
+                                continue  # Skip this day
+                            
+                            # Check if adding this course would exceed the 2 cours per day limit for the group
+                            if component_name == "cours" and len(group_daily_courses[group][day]) >= 2:
+                                continue  # Skip this day
+                                
+                            slots = [s["label"] for s in TIME_SLOTS]
+                            random.shuffle(slots)
+                            
+                            for slot_label in slots:
+                                slot_index = next((i for i, s in enumerate(TIME_SLOTS) if s["label"] == slot_label), None)
+                                
+                                # Skip unavailable slots
+                                if not is_slot_available(day, slot_index):
+                                    continue
+                                
+                                # Check if slot is available for this group
+                                if st.session_state.schedules[group][day].get(slot_label) is None:
+                                    # Check if this would create more than 3 consecutive sessions
+                                    if would_create_too_many_consecutive_sessions(st.session_state.schedules, group, day, slot_index):
+                                        continue
+                                
+                                    # Check if teacher is available
+                                    teacher_key = f"{teacher}_{day}_{slot_label}"
+                                    if teacher_key not in teacher_schedule:
+                                        # Track teacher's day
+                                        if teacher not in teacher_days:
+                                            teacher_days[teacher] = set()
+                                        teacher_days[teacher].add(day)
+                                        
+                                        # Schedule this session
+                                        st.session_state.schedules[group][day][slot_label] = session_label
+                                        
+                                        # Track courses per day if this is a cours component
+                                        if component_name == "cours":
+                                            group_daily_courses[group][day].append(course_name)
+                                        
+                                        # Update consecutive sessions
+                                        if slot_index not in consecutive_sessions[group][day]:
+                                            consecutive_sessions[group][day][slot_index] = 1
+                                            # Check if there are consecutive sessions before this
+                                            if slot_index > 0 and (slot_index - 1) in consecutive_sessions[group][day]:
+                                                prev_consecutive = consecutive_sessions[group][day][slot_index - 1]
+                                                consecutive_sessions[group][day][slot_index] = prev_consecutive + 1
+                                        
+                                        teacher_schedule[teacher_key] = True
+                                        scheduled = True
+                                        break
+                        
+                        if not scheduled:
+                            # If we couldn't schedule this session, try using a backup teacher
+                            backup_teachers = COMPONENT_BACKUP_TEACHERS.get(component_name, [])
+                            success = False
+                            
+                            for backup_teacher in backup_teachers:
+                                # Try using backup teacher
+                                for day in days:
+                                    if success:
+                                        break
+                                    
+                                    # Check if backup teacher already teaches on 2 days
+                                    if backup_teacher in teacher_days and len(teacher_days[backup_teacher]) >= 2 and day not in teacher_days[backup_teacher]:
+                                        continue
+                                    
+                                    for slot_label in slots:
+                                        slot_index = next((i for i, s in enumerate(TIME_SLOTS) if s["label"] == slot_label), None)
+                                        
+                                        # Skip unavailable slots
+                                        if not is_slot_available(day, slot_index):
+                                            continue
+                                        
+                                        # Check if slot is available for this group
+                                        if st.session_state.schedules[group][day].get(slot_label) is None:
+                                            # Check if this would create more than 3 consecutive sessions
+                                            if would_create_too_many_consecutive_sessions(st.session_state.schedules, group, day, slot_index):
+                                                continue
+                                            
+                                            # Check if backup teacher is available
+                                            teacher_key = f"{backup_teacher}_{day}_{slot_label}"
+                                            if teacher_key not in teacher_schedule:
+                                                # Track teacher's day
+                                                if backup_teacher not in teacher_days:
+                                                    teacher_days[backup_teacher] = set()
+                                                teacher_days[backup_teacher].add(day)
+                                                
+                                                # Schedule this session with backup teacher
+                                                session_label = f"{course_name} {component_name} ({backup_teacher}) (backup)"
+                                                st.session_state.schedules[group][day][slot_label] = session_label
+                                                
+                                                teacher_schedule[teacher_key] = True
+                                                success = True
+                                                break
+                            
+                            if not success:
+                                st.warning(f"Could not schedule {course_name} {component_name} for {group}")
     
     # Insert breaks to resolve consecutive session issues
     for group in st.session_state.groups:
@@ -947,9 +1083,20 @@ def main():
         # Display course information
         for course, components in COURSES.items():
             with st.expander(f"{course}"):
-                for component, details in components.items():
-                    shared_text = "Shared" if details.get("shared", False) else "Separate"
-                    st.write(f"**{component}**: {details['teacher']} ({shared_text})")
+                for component_name, details in components.items():
+                    if isinstance(details, list):
+                        # For components with multiple teachers (list)
+                        for i, teacher_info in enumerate(details):
+                            shared_text = "Shared" if teacher_info.get("shared", False) else "Separate"
+                            teacher = teacher_info.get("teacher", "Unknown")
+                            if i == 0:
+                                st.write(f"**{component_name}**: {teacher} ({shared_text})")
+                            else:
+                                st.write(f"   • {teacher} ({shared_text})")
+                    else:
+                        # For components with a single teacher (dict)
+                        shared_text = "Shared" if details.get("shared", False) else "Separate"
+                        st.write(f"**{component_name}**: {details['teacher']} ({shared_text})")
         
         st.divider()
         
